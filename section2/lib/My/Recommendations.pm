@@ -12,30 +12,30 @@ my $memo = {};
 
 sub sim_distance {
     my ($prefs, $person1, $person2) = @_;
+
     my @si = grep { exists $prefs->{$person2}{$_} } keys %{$prefs->{$person1}};
     return 0 if scalar @si == 0;
+
     my $sum_of_squares = sum map { ($prefs->{$person1}{$_} - $prefs->{$person2}{$_}) ** 2 } @si;
     return 1 / (1 + $sum_of_squares);
 }
 
 sub sim_pearson {
     my ($prefs, $person1, $person2) = @_;
-    my $si = {};
-    $si->{$_} = 1 for grep { exists $prefs->{$person2}{$_} }
-        keys %{$prefs->{$person1}};
 
-    return 0 if (my $n = scalar keys %$si) == 0;
+    my @si = grep { exists $prefs->{$person2}{$_} } keys %{$prefs->{$person1}};
+    return 0 if (my $n = @si) == 0;
+
     ## 全ての嗜好を合計する
-
-    my $sum1 = sum map { $prefs->{$person1}{$_} } keys %$si;
-    my $sum2 = sum map { $prefs->{$person2}{$_} } keys %$si;
+    my $sum1 = sum map { $prefs->{$person1}{$_} } @si;
+    my $sum2 = sum map { $prefs->{$person2}{$_} } @si;
 
     ## 平方を合計する
-    my $sum1Sq = sum map { $prefs->{$person1}{$_} ** 2 } keys %$si;
-    my $sum2Sq = sum map { $prefs->{$person2}{$_} ** 2 } keys %$si;
+    my $sum1Sq = sum map { $prefs->{$person1}{$_} ** 2 } @si;
+    my $sum2Sq = sum map { $prefs->{$person2}{$_} ** 2 } @si;
 
     ## 積を合計する
-    my $pSum = sum map { $prefs->{$person1}{$_} * $prefs->{$person2}{$_} } keys %$si;
+    my $pSum = sum map { $prefs->{$person1}{$_} * $prefs->{$person2}{$_} } @si;
 
     ## ピアソンによるスコアを計算する
     my $num = $pSum - ($sum1 * $sum2 / $n);
@@ -66,25 +66,21 @@ sub sim_tanimoto {
 }
 
 sub top_matches {
-    my ($prefs, $person1, $n, $similarity) = @_;
+    my ($prefs, $person, $n, $similarity) = @_;
     $n ||= 5;
     $similarity ||= \&sim_pearson;
     my @sims;
-    my $calc_count;
     ## 全ユーザのsimilarityを計算
-    for my $person2 (keys %$prefs) {
-        next if $person2 eq $person1;
-        $memo->{$person2} = {} if !exists $memo->{$person2};
-        my $sim = $memo->{$person2}->{$person1} ? $memo->{$person2}->{$person1} :
-                  $memo->{$person1}->{$person2} ? $memo->{$person1}->{$person2} : undef;
+    for my $other (keys %$prefs) {
+        next if $other eq $person;
+        ## メモ化
+        my $sim = $memo->{$other}->{$person} || $memo->{$person}->{$other};
         if (!$sim) {
-            $sim = &$similarity($prefs, $person1, $person2);
-            $memo->{$person2}->{$person1} = $sim;
-            $calc_count++;
+            $sim = &$similarity($prefs, $person, $other);
+           $memo->{$other}->{$person} = $sim;
         }
-        push @sims,  [$person2, $sim];
+        push @sims,  [$other, $sim];
     }
-    # say "calculate similarity $calc_count times";
     ## スコア順に並び替え
     my @top_matches = sort { $b->[1] <=> $a->[1] } @sims;
     return splice(@top_matches, 0, $n);
@@ -131,7 +127,7 @@ sub transform_prefs {
 
 sub calc_similar_items {
     my $prefs = shift;
-    my $n = shift || 10;
+    my $n = shift || 5;
     my $similarity = shift || \&sim_distance;
     my $result = {};
     ## 嗜好の行列をアイテム中心な形に反転させる
@@ -159,25 +155,18 @@ sub get_recommended_items {
     for my $item (keys %$user_ratings) {
         my $rating = $user_ratings->{$item};
         for my $match (@{$item_match->{$item}}) {
-            my ($item2, $similarity) = @$match;
-
+            my ($item2, $sim) = @$match;
             ## 既にユーザが評価を行っていれば無視する
             next if $user_ratings->{$item2};
-
             ## 評点と類似度をかけあわせたものの合計で重み付けする
-            $scores->{$item2} += $similarity * $rating;
-
+            $scores->{$item2} += $sim * $rating;
             ## 全ての類似度の合計
-            $total_sim->{$item2} += $similarity;
+            $total_sim->{$item2} += $sim;
         }
     }
     ## 正規化のため、それぞれの重み付けしたスコアを類似度の合計で割る
-    my $rankings = [];
-    for my $item (keys %$scores) {
-        my $score = $scores->{$item};
-        push @$rankings, [$item, $score / $total_sim->{$item}];
-    }
-    return sort { $b->[1] <=> $a->[1] } @$rankings;
+    return sort { $b->[1] <=> $a->[1] }
+        map { [$_, $scores->{$_} / $total_sim->{$_}] } keys %$scores;
 }
 
 1;

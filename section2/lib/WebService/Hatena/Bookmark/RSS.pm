@@ -5,26 +5,19 @@ use XML::RSS::LibXML;
 use Perl6::Say;
 use URI;
 use Readonly;
-use Exporter::Lite;
 use LWP::UserAgent;
 use Encode;
 use Digest::SHA1 qw(sha1_hex);
-use Cache::Memcached::Fast;
 
+use Exporter::Lite;
 our @EXPORT = qw/get_popular get_userposts get_urlposts/;
 Readonly my $BASE_URL => "http://b.hatena.ne.jp";
 
-## キャッシュファイルが多くなると動かないのでやめた
-# use Cache::File;
-# my $cache = Cache::File->new(
-#     cache_root => '/var/tmp',
-#     default_expires => '86400 sec',
-# ) or die;
-
-my $cache = Cache::Memcached::Fast->new({
-    servers         => [ 'localhost:11211' ],
-    compress_threshold => 500,
-});
+use Cache::File;
+my $cache = Cache::File->new(
+    cache_root => '/var/tmp',
+    default_expires => '86400 sec',
+) or die;
 
 my $ua = LWP::UserAgent->new(
     timeout => 10,
@@ -67,7 +60,7 @@ sub get_popular {
 sub _get_feed {
     my $url = shift;
     my $content;
-    my $rss = $cache->get(_key($url));
+    my $rss = $cache->thaw(_key($url));
     if (!$rss) {
         my $res;
         for (0..2) {
@@ -85,7 +78,7 @@ sub _get_feed {
         if ($@) {
             return;
         }
-        $cache->set(_key($url), $rss);
+        $cache->freeze(_key($url), $rss);
     }
     else {
         say "cache hit! $url";

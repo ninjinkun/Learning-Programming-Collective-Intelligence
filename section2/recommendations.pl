@@ -71,11 +71,15 @@ say sim_tanimoto($critics, 'Lisa Rose', 'Gene Seymour');
 
 say;
 say "topMaches in Toby";
-say $_->[0] . ' : ' . $_->[1] for top_matches($critics, 'Toby', 3);
+say $_->[0] . ' : ' . $_->[1] for top_matches($critics, 'Toby', 3, \&sim_distance);
+say;
+say "topMaches in Toby with sim_tanimoto";
 say $_->[0] . ' : ' . $_->[1] for top_matches($critics, 'Toby', 3, \&sim_tanimoto);
 
 say "getRecommendations in Toby";
 say $_->[0] . ' : ' . $_->[1] for get_recommendations($critics, 'Toby');
+say;
+say "getRecommendations in Toby with sim_tanimoto";
 say $_->[0] . ' : ' . $_->[1] for get_recommendations($critics, 'Toby', \&sim_tanimoto);
 
 say;
