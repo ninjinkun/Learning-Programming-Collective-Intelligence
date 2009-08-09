@@ -7,11 +7,6 @@ use Exporter::Lite;
 our @EXPORT = qw/sim_distance sim_pearson sim_tanimoto
                  top_matches get_recommendations
                  transform_prefs calc_similar_items get_recommended_items/;
-use Cache::Memcached::Fast;
-my $cache = Cache::Memcached::Fast->new({
-    servers         => [ 'localhost:11211' ],
-    compress_threshold => 500,
-});
 
 my $memo = {};
 
@@ -89,7 +84,7 @@ sub top_matches {
         }
         push @sims,  [$person2, $sim];
     }
-    say "calculate similarity $calc_count times";
+    # say "calculate similarity $calc_count times";
     ## スコア順に並び替え
     my @top_matches = sort { $b->[1] <=> $a->[1] } @sims;
     return splice(@top_matches, 0, $n);
@@ -143,18 +138,14 @@ sub calc_similar_items {
     my $item_prefs = transform_prefs($prefs);
     my $c = 0;
     for my $item (keys %$item_prefs) {
-        my $scores = $cache->get($item.'sim');
-#        my $scores;
-            ## 巨大なデータセット用にステータスを表示
-            say $c += 1;
-            say "$c / " . scalar keys %$item_prefs if ( $c % 100 == 0 );
-        if (!$scores) {
-            ## このアイテムにもっとも似ているアイテムたちを探す
-            my @scores = top_matches($item_prefs, $item, $n, $similarity);
-            $scores = \@scores;
-        }
-        $result->{$item} = $scores;
-        $cache->set($item.'sim', $scores);
+        ## 巨大なデータセット用にステータスを表示
+        $c += 1;
+        say "$c / " . scalar keys %$item_prefs if ( $c % 100 == 0 );
+
+        ## このアイテムにもっとも似ているアイテムたちを探す
+        my @scores = top_matches($item_prefs, $item, $n, $similarity);
+        $result->{$item} = \@scores;
+
     }
     return $result;
 }
