@@ -3,6 +3,7 @@ use strict;
 use warnings;
 use List::Util qw/sum/;
 use Perl6::Say;
+use Heap::Simple;
 use Exporter::Lite;
 our @EXPORT = qw/sim_distance sim_pearson sim_tanimoto
                  top_matches get_recommendations
@@ -69,7 +70,8 @@ sub top_matches {
     my ($prefs, $person, $n, $similarity) = @_;
     $n ||= 5;
     $similarity ||= \&sim_pearson;
-    my @sims;
+
+    my $heap = Heap::Simple->new(elements => "Array");
     ## 全ユーザのsimilarityを計算
     for my $other (keys %$prefs) {
         next if $other eq $person;
@@ -79,11 +81,15 @@ sub top_matches {
             $sim = &$similarity($prefs, $person, $other);
            $memo->{$other}->{$person} = $sim;
         }
-        push @sims,  [$other, $sim];
+        $heap->insert([$sim, $other]);
     }
     ## スコア順に並び替え
-    my @top_matches = sort { $b->[1] <=> $a->[1] } @sims;
-    return splice(@top_matches, 0, $n);
+    my @top_matches;
+    for (0.. $n) {
+        my $top = $heap->extract_top;
+        push @top_matches, [ $top->[1], $top->[0] ];
+    }
+    return @top_matches;
 }
 
 sub get_recommendations {
